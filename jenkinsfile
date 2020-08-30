@@ -1,0 +1,56 @@
+pipeline {
+    agent any 
+    stages {
+        stage ('Build BackEnd') {
+            steps {
+                sh 'mvn clean package -DskipTests=true'
+            }  
+        }
+        stage ('Unit Tests') {
+            steps {
+                sh 'mvn test'
+            }  
+        }
+        stage ('Deploy BackEnd') {
+            steps {
+                deploy adapters: [tomcat9(credentialsId: 'tomcat9', path: '', url: 'http://localhost:8001/')], contextPath: 'tasks-backend', war: 'target/tasks-backend.war'
+            }
+        }
+        stage ('API Test') {
+            steps {
+                dir ('api-test'){
+                    git 'https://github.com/Jheymisson/test-api.git'
+                    sh 'mvn test'
+                }
+            }
+        }
+        stage ('Deploy FrontEnd') {
+            steps {
+                dir ('frontEnd'){
+                    git 'https://github.com/Jheymisson/tasks-frontend.git'
+                    sh 'mvn clean package'
+                    deploy adapters: [tomcat9(credentialsId: 'tomcat9', path: '', url: 'http://localhost:8001/')], contextPath: 'tasks', war: 'target/tasks.war'
+                }         
+            }
+        }
+        stage ('Funcional Test') {
+            steps {
+                dir ('Selenium'){
+                    git 'https://github.com/Jheymisson/test-selenium.git'
+                    sh 'mvn test'
+                }
+            }
+        }
+        stage ('Deploy Prod') {
+            steps {
+                sh 'docker-compose build'
+                sh 'docker-compose up -d'
+            }
+        }
+    }
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml, api-test/target/surefire-reports/*.xml, Selenium/target/surefire-reports/*.xml'
+        }
+    }
+}
